@@ -18,6 +18,7 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 using Robust.Shared.Exceptions;
 #endif
 
+using Robust.Reforged;
 
 namespace Robust.Shared.GameObjects
 {

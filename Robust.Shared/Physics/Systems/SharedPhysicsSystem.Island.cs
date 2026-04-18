@@ -11,6 +11,8 @@ using Robust.Shared.Physics.Dynamics.Contacts;
 using Robust.Shared.Physics.Dynamics.Joints;
 using Robust.Shared.Utility;
 
+using Robust.Reforged;
+
 namespace Robust.Shared.Physics.Systems;
 
 /*
@@ -762,22 +764,24 @@ public abstract partial class SharedPhysicsSystem
             var angularVelocity = body.AngularVelocity;
 
             // if the body cannot move, nothing to do here
-            if (body.BodyType == BodyType.Dynamic)
-            {
-                if (body.IgnoreGravity)
-                {
-                    linearVelocity += body.Force * data.FrameTime * body.InvMass;
-                }
-                else
-                {
-                    linearVelocity += (gravity + body.Force * body.InvMass) * data.FrameTime;
-                }
-
-                angularVelocity += body.InvI * body.Torque * data.FrameTime;
-
-                linearVelocity *= Math.Clamp(1.0f - data.FrameTime * body.LinearDamping, 0.0f, 1.0f);
-                angularVelocity *= Math.Clamp(1.0f - data.FrameTime * body.AngularDamping, 0.0f, 1.0f);
-            }
+            // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
+            //if (body.BodyType == BodyType.Dynamic)
+            //{
+            //    if (body.IgnoreGravity)
+            //    {
+            //        linearVelocity += body.Force * data.FrameTime * body.InvMass;
+            //    }
+            //    else
+            //    {
+            //        linearVelocity += (gravity + body.Force * body.InvMass) * data.FrameTime;
+            //    }
+			//
+            //    angularVelocity += body.InvI * body.Torque * data.FrameTime;
+			//
+            //    linearVelocity *= Math.Clamp(1.0f - data.FrameTime * body.LinearDamping, 0.0f, 1.0f);
+            //    angularVelocity *= Math.Clamp(1.0f - data.FrameTime * body.AngularDamping, 0.0f, 1.0f);
+            //}
+            // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
 
             positions[i] = position;
             angles[i] = angle;
@@ -844,28 +848,87 @@ public abstract partial class SharedPhysicsSystem
         var maxAngVelSq = maxAngVel * maxAngVel;
 
         // Integrate positions
-        for (var i = 0; i < bodyCount; i++)
+        // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
+        //for (var i = 0; i < bodyCount; i++)
+        //{
+        //    var linearVelocity = linearVelocities[offset + i];
+        //    var angularVelocity = angularVelocities[offset + i];
+		//
+        //    var velSqr = linearVelocity.LengthSquared();
+        //    if (velSqr > maxVelSq)
+        //    {
+        //        linearVelocity *= maxVel / MathF.Sqrt(velSqr);
+        //        linearVelocities[offset + i] = linearVelocity;
+        //    }
+		//
+        //    if (angularVelocity * angularVelocity > maxAngVelSq)
+        //    {
+        //        angularVelocity *= maxAngVel / MathF.Abs(angularVelocity);
+        //        angularVelocities[offset + i] = angularVelocity;
+        //    }
+		//
+        //    // Integrate
+        //    positions[i] += linearVelocity * data.FrameTime;
+        //    angles[i] += angularVelocity * data.FrameTime;
+        //}
+
+        //unsafe
+        //{
+        //    fixed (Vector2* pPos = positions)
+        //    fixed (float* pAng = angles)
+        //    fixed (Vector2* pVel = &linearVelocities[offset])
+        //    fixed (float* pAngVel = &angularVelocities[offset])
+        //    {
+        //        ReforgedNative.IntegratePositionsNative(
+        //            pPos, pAng, pVel, pAngVel, 
+        //            bodyCount, data.FrameTime, maxVel, maxAngVel);
+        //    }
+        //}
+		// * Reforged: Super-Fast Native Integration
+        unsafe
         {
-            var linearVelocity = linearVelocities[offset + i];
-            var angularVelocity = angularVelocities[offset + i];
+            var forces = ArrayPool<float>.Shared.Rent(bodyCount * 2);
+            var torques = ArrayPool<float>.Shared.Rent(bodyCount);
+            var invMasses = ArrayPool<float>.Shared.Rent(bodyCount);
+            var invIs = ArrayPool<float>.Shared.Rent(bodyCount);
+            var frictions = ArrayPool<float>.Shared.Rent(bodyCount);
+            var angDamps = ArrayPool<float>.Shared.Rent(bodyCount);
 
-            var velSqr = linearVelocity.LengthSquared();
-            if (velSqr > maxVelSq)
-            {
-                linearVelocity *= maxVel / MathF.Sqrt(velSqr);
-                linearVelocities[offset + i] = linearVelocity;
+            for (int i = 0; i < bodyCount; i++) {
+                var b = island.Bodies[i].Comp1;
+                forces[i*2] = b.Force.X; forces[i*2+1] = b.Force.Y;
+                torques[i] = b.Torque;
+                invMasses[i] = b.InvMass;
+                invIs[i] = b.InvI;
+                frictions[i] = b.LinearDamping;
+                angDamps[i] = b.AngularDamping;
             }
 
-            if (angularVelocity * angularVelocity > maxAngVelSq)
+            fixed (Vector2* pPos = positions)
+            fixed (float* pAng = angles)
+            fixed (Vector2* pVel = &linearVelocities[offset])
+            fixed (float* pAngVel = &angularVelocities[offset])
+            fixed (float* pForces = forces)
+            fixed (float* pTorques = torques)
+            fixed (float* pInvM = invMasses)
+            fixed (float* pInvI = invIs)
+            fixed (float* pFric = frictions)
+            fixed (float* pADamp = angDamps)
             {
-                angularVelocity *= maxAngVel / MathF.Abs(angularVelocity);
-                angularVelocities[offset + i] = angularVelocity;
+                ReforgedNative.IntegrateAllParallel(
+                    pPos, pAng, pVel, pAngVel,
+                    pForces, pTorques, pInvM, pInvI, pFric, pADamp,
+                    bodyCount, data.FrameTime, maxVel, maxAngVel);
             }
 
-            // Integrate
-            positions[i] += linearVelocity * data.FrameTime;
-            angles[i] += angularVelocity * data.FrameTime;
+            ArrayPool<float>.Shared.Return(forces);
+            ArrayPool<float>.Shared.Return(torques);
+            ArrayPool<float>.Shared.Return(invMasses);
+            ArrayPool<float>.Shared.Return(invIs);
+            ArrayPool<float>.Shared.Return(frictions);
+            ArrayPool<float>.Shared.Return(angDamps);
         }
+        // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
 
         island.PositionSolved = false;
 
@@ -1123,6 +1186,11 @@ public abstract partial class SharedPhysicsSystem
             {
                 Dirty(uid, body);
             }
+            //if (!float.IsNaN(position.X))
+            //{
+            //    xform._localPosition += position;
+            //    Dirty(uid, xform);
+            //}
         }
     }
 

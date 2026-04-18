@@ -12,6 +12,8 @@ using Robust.Shared.Asynchronous;
 using Robust.Shared.Reflection;
 using Robust.Shared.Utility;
 
+using Robust.Reforged;
+
 namespace Robust.Server
 {
 
@@ -46,6 +48,7 @@ namespace Robust.Server
         {
             ServerWarmup.RunWarmup();
 
+			ReforgedNative.Load();
             Thread.CurrentThread.Name = "Main Thread";
             var deps = IoCManager.InitThread();
             ServerIoC.RegisterIoC(deps);
