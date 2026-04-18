@@ -1,0 +1,15 @@
+# You can use this Makefile to put in your space-station-14 folder to ez compile engine's native code (lib) via `make`
+# Or ezly run dev server by `make run-server`
+.PHONY: all clean
+
+all:
+	$(MAKE) -C RobustToolbox
+	cp RobustToolbox/reforged/build/libreforged.so bin/Content.Server/
+	cp RobustToolbox/reforged/build/libreforged.so bin/Content.Client/
+
+run-server: all
+	@chmod +x runserver.sh
+	./runserver.sh
+
+clean:
+	$(MAKE) -C RobustToolbox clean
