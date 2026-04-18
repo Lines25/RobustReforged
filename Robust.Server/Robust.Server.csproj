@@ -68,6 +68,11 @@
     <RobustLinkAssemblies Include="TerraFX.Interop.Windows" />
   </ItemGroup>
 
+  <!-- Include reforged -->
+  <ItemGroup>
+    <ProjectReference Include="../Robust.Reforged/Robust.Reforged.csproj" />
+  </ItemGroup>
+
   <Import Project="..\MSBuild\Robust.Properties.targets" />
 
   <Import Project="..\MSBuild\Robust.Trimming.targets" />

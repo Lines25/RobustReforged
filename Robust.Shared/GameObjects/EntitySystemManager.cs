@@ -17,6 +17,7 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 using Robust.Shared.Exceptions;
 #endif
 
+using Robust.Reforged;
 
 namespace Robust.Shared.GameObjects
 {
@@ -314,9 +315,19 @@ namespace Robust.Shared.GameObjects
                 try
                 {
 #endif
-                    var sw = ProfSampler.StartNew();
-                    updReg.System.Update(frameTime);
-                    _profManager.WriteValue(updReg.System.GetType().Name, sw);
+//<<<<<<< HEAD
+//                    var sw = ProfSampler.StartNew();
+//                    updReg.System.Update(frameTime);
+//                    _profManager.WriteValue(updReg.System.GetType().Name, sw);
+//=======
+					var sysName = updReg.System.GetType().Name;
+                    ReforgedNative.reforged_section_begin(sysName);
+                    using (_profManager.Value(sysName))
+                    {
+                        updReg.System.Update(frameTime);
+                    }
+                    ReforgedNative.reforged_section_end(sysName);
+//>>>>>>> eb8fe5bb6 ([REFORGED] First commit (Physics kinda rewritten to work in C++))
 #if EXCEPTION_TOLERANCE
                 }
                 catch (Exception e)

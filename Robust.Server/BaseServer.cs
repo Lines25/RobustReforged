@@ -46,6 +46,8 @@ using Robust.Shared.Utility;
 using Serilog.Debugging;
 using Serilog.Sinks.Loki;
 
+using Robust.Reforged;
+
 namespace Robust.Server
 {
     /// <summary>
@@ -727,46 +729,68 @@ namespace Robust.Server
             _modLoader.BroadcastUpdate(ModUpdateLevel.InputPostEngine, args);
         }
 
+		// NOTE: Only runs when there's more than 1 player
         private void Update(FrameEventArgs frameEventArgs)
         {
+        	ReforgedNative.reforged_tick_begin();
             ServerCurTick.Set(_time.CurTick.Value);
             ServerCurTime.Set(_time.CurTime.TotalSeconds);
 
             _systemConsole.UpdateTick();
 
+			ReforgedNative.reforged_section_begin("PreEngine");
             using (TickUsage.WithLabels("PreEngine").NewTimer())
             {
                 _modLoader.BroadcastUpdate(ModUpdateLevel.PreEngine, frameEventArgs);
             }
+			ReforgedNative.reforged_section_end("PreEngine");
 
+			ReforgedNative.reforged_section_begin("NetworkedCVar");
             using (TickUsage.WithLabels("NetworkedCVar").NewTimer())
             {
                 _config.TickProcessMessages();
             }
+			ReforgedNative.reforged_section_end("NetworkedCVar");
 
+			ReforgedNative.reforged_section_begin("Timers");
             using (TickUsage.WithLabels("Timers").NewTimer())
             {
                 _consoleHost.CommandBufferExecute();
                 _timerManager.UpdateTimers(frameEventArgs);
             }
+			ReforgedNative.reforged_section_end("Timers");
 
+			ReforgedNative.reforged_section_begin("AsyncTasks");
             using (TickUsage.WithLabels("AsyncTasks").NewTimer())
             {
                 _taskManager.ProcessPendingTasks();
             }
+			ReforgedNative.reforged_section_end("AsyncTasks");
 
             // Pass Histogram into the IEntityManager.Update so it can do more granular measuring.
+			ReforgedNative.reforged_section_begin("EntityUpdate");
             _entityManager.TickUpdate(frameEventArgs.DeltaSeconds, noPredictions: false, TickUsage);
+			ReforgedNative.reforged_section_end("EntityUpdate");
 
+			ReforgedNative.reforged_section_begin("PostEngine");
             using (TickUsage.WithLabels("PostEngine").NewTimer())
             {
                 _modLoader.BroadcastUpdate(ModUpdateLevel.PostEngine, frameEventArgs);
             }
+			ReforgedNative.reforged_section_end("PostEngine");
 
+			ReforgedNative.reforged_section_begin("GameState");
             using (TickUsage.WithLabels("GameState").NewTimer())
             {
                 _stateManager.SendGameStateUpdate();
             }
+			ReforgedNative.reforged_section_end("GameState");
+
+            ReforgedNative.reforged_tick_end();
+            if (_time.CurTick.Value % 300 == 0)
+                ReforgedNative.PrintSectionsReport();
+            if (ReforgedNative.reforged_tick_is_spike(5.0) == 1)
+                ReforgedNative.Log($"SPIKE! {ReforgedNative.reforged_tick_last_ms():F2}ms vs avg {ReforgedNative.reforged_tick_avg_ms():F2}ms");
         }
 
         private void FrameUpdate(FrameEventArgs frameEventArgs)

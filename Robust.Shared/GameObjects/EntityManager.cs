@@ -23,6 +23,8 @@ using Robust.Shared.Serialization.Markdown.Mapping;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
 
+using Robust.Reforged;
+
 namespace Robust.Shared.GameObjects
 {
     public delegate void EntityUidQueryCallback(EntityUid uid);
@@ -272,33 +274,37 @@ namespace Robust.Shared.GameObjects
             Started = false;
         }
 
-        public virtual void TickUpdate(float frameTime, bool noPredictions, Histogram? histogram)
-        {
-            using (histogram?.WithLabels("EntitySystems").NewTimer())
-            using (_prof.Group("Systems"))
-            {
-                _entitySystemManager.TickUpdate(frameTime, noPredictions);
-            }
-
-            using (histogram?.WithLabels("EntityEventBus").NewTimer())
-            using (_prof.Group("Events"))
-            {
-                EventBusInternal.ProcessEventQueue();
-            }
-
-            using (histogram?.WithLabels("QueuedDeletion").NewTimer())
-            using (_prof.Group("QueueDel"))
-            {
-                ProcessQueueudDeletions();
-            }
-
-            using (histogram?.WithLabels("ComponentCull").NewTimer())
-            using (_prof.Group("ComponentCull"))
-            {
-                CullRemovedComponents();
-            }
-        }
-
+		public virtual void TickUpdate(float frameTime, bool noPredictions, Histogram? histogram)
+		{
+		    using (histogram?.WithLabels("EntitySystems").NewTimer())
+		    using (_prof.Group("Systems"))
+		    {
+		        ReforgedNative.reforged_section_begin("ECS_Systems");
+		        _entitySystemManager.TickUpdate(frameTime, noPredictions);
+		        ReforgedNative.reforged_section_end("ECS_Systems");
+		    }
+		    using (histogram?.WithLabels("EntityEventBus").NewTimer())
+		    using (_prof.Group("Events"))
+		    {
+		        ReforgedNative.reforged_section_begin("ECS_Events");
+		        EventBusInternal.ProcessEventQueue();
+		        ReforgedNative.reforged_section_end("ECS_Events");
+		    }
+		    using (histogram?.WithLabels("QueuedDeletion").NewTimer())
+		    using (_prof.Group("QueueDel"))
+		    {
+		        ReforgedNative.reforged_section_begin("ECS_QueueDel");
+		        ProcessQueueudDeletions();
+		        ReforgedNative.reforged_section_end("ECS_QueueDel");
+		    }
+		    using (histogram?.WithLabels("ComponentCull").NewTimer())
+		    using (_prof.Group("ComponentCull"))
+		    {
+		        ReforgedNative.reforged_section_begin("ECS_ComponentCull");
+		        CullRemovedComponents();
+		        ReforgedNative.reforged_section_end("ECS_ComponentCull");
+		    }
+		}
         internal virtual void ProcessQueueudDeletions()
         {
             while (QueuedDeletions.TryDequeue(out var uid))
