@@ -1,3 +1,5 @@
+## Ancient commented code - may be useful idk
+# - Lines, Apr 18 03:21 PM EEST 2026
 # CXX = clang++
 # CXXFLAGS = -O3 -march=x86-64-v2 -fPIC -shared -std=c++23
 # SRC = $(wildcard reforged/src/*.cpp)
@@ -23,6 +25,7 @@
 # clean:
 # 	rm -rf reforged/build
 # 	dotnet clean Robust.Reforged/
+## Ancient commented code - may be useful idk
 
 CXX = clang++
 CXXFLAGS = -O3 -march=x86-64-v2 -fPIC -shared -std=c++23
