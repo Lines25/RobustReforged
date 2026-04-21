@@ -75,11 +75,6 @@ namespace Robust.Shared.Physics.Systems
         private ComponentRegistration _physicsReg = default!;
         private byte _angularVelocityIndex;
 
-		// * Reforged
-        private PhysicsBodyData[] _reforgedPhysicsBuffer = new PhysicsBodyData[15000];
-        private EntityUid[] _reforgedEntityBuffer = new EntityUid[15000];
-		// * Reforged
-
         public override void Initialize()
         {
             base.Initialize();
@@ -263,68 +258,6 @@ namespace Robust.Shared.Physics.Systems
             WakeBody(uid, body: physics);
         }
 
-		// * Reforged
-		private void _Reforged1(float frameTime)
-		{
-		    int count = 0;
-		
-		    // everyone who isn't sleeping and isn't a wall
-		    var query = EntityManager.EntityQueryEnumerator<PhysicsComponent, TransformComponent>();
-		    while (query.MoveNext(out var uid, out var physics, out var xform))
-		    {
-				if (physics.BodyType != BodyType.Dynamic || !physics.Awake)
-				        continue;
-		        // bad, but resize if count is too big
-		        if (count >= _reforgedPhysicsBuffer.Length)
-		        {
-		            Array.Resize(ref _reforgedPhysicsBuffer, _reforgedPhysicsBuffer.Length * 2);
-		            Array.Resize(ref _reforgedEntityBuffer, _reforgedEntityBuffer.Length * 2);
-		        }
-		
-		        _reforgedPhysicsBuffer[count] = new PhysicsBodyData
-		        {
-		            PosX = xform.LocalPosition.X,
-		            PosY = xform.LocalPosition.Y,
-		            VelX = physics.LinearVelocity.X,
-		            VelY = physics.LinearVelocity.Y,
-		            AngVel = physics.AngularVelocity,
-		            Friction = physics.LinearDamping,
-		            AngDamping = physics.AngularDamping,
-		            InvMass = physics.InvMass,
-		            InvI = physics.InvI,
-		            ForceX = physics.Force.X,
-		            ForceY = physics.Force.Y,
-		            Torque = physics.Torque
-		        };
-
-		        _reforgedEntityBuffer[count] = uid;
-		        count++;
-		    }
-		
-		    if (count == 0) return;
-		
-			// cpp
-		    unsafe
-		    {
-		        fixed (PhysicsBodyData* ptr = _reforgedPhysicsBuffer)
-		        {
-		            ReforgedNative.StepPhysicsParallel(ptr, count, frameTime);
-		        }
-		    }
-		
-		    for (int i = 0; i < count; i++) {
-	            var uid = _reforgedEntityBuffer[i];
-	            var data = _reforgedPhysicsBuffer[i];
-	        
-	            if (PhysicsQuery.TryGetComponent(uid, out var phys)) {
-	                phys.LinearVelocity = new Vector2(data.VelX, data.VelY);
-	                phys.AngularVelocity = data.AngVel; // ПОВЕРТАЄМО КРУТІННЯ
-	                Dirty(uid, phys); 
-	            }
-	        }
-		}
-		// * Reforged
-
         /// <summary>
         ///     Simulates the physical world for a given amount of time.
         /// </summary>
@@ -369,8 +302,6 @@ namespace Robust.Shared.Physics.Systems
                 // But that might be unnecessarily expensive for what are hopefully only infrequent mispredicts.
 
                 CollideContacts();
-
-				//_Reforged1(frameTime);
 
                 Step(frameTime, prediction);
 
