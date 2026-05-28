@@ -730,7 +730,7 @@ public abstract partial class SharedPhysicsSystem
 	/// <summary>
     ///     Go through all the bodies in this island and solve.
     /// </summary>
-    private void SolveIsland(
+	private void SolveIsland(
         ref IslandData island,
         in SolverData data,
         bool prediction,
