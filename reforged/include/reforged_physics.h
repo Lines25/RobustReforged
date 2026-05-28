@@ -2,14 +2,6 @@
 
 #include <cstdint>
 
-#if defined(_MSC_VER)
-    #define REFORGED_API __declspec(dllexport)
-#elif defined(__GNUC__) || defined(__clang__)
-    #define REFORGED_API __attribute__((visibility("default")))
-#else
-    #define REFORGED_API
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
