@@ -83,4 +83,4 @@ Robust.Docfx/api
 *.lscache
 
 # * Reforged
-reforged/build
+reforged/build/*

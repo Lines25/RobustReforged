@@ -336,6 +336,10 @@ namespace Robust.Shared.GameObjects
                     updReg.System.Update(frameTime);
                     ReforgedNative.reforged_section_end(sysName);
                     _profManager.WriteValue(sysName, sw);
+                    //if (sw.Elapsed.TotalMilliseconds > 1.0)
+                    //{
+                    //    _sawmill.Info($"[SLOW SYSTEM] {updReg.System.GetType().Name}: {sw.Elapsed.TotalMilliseconds:F2}ms");
+                    //}
 #if EXCEPTION_TOLERANCE
                 }
                 catch (Exception e)
