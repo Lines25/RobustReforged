@@ -330,6 +330,7 @@ namespace Robust.Shared.GameObjects
                 try
                 {
 #endif
+            		var sw = ProfSampler.StartNew();
 					var sysName = updReg.System.GetType().Name;
                     ReforgedNative.reforged_section_begin(sysName);
                     updReg.System.Update(frameTime);
