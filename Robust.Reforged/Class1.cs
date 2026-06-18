@@ -6,14 +6,14 @@ namespace Robust.Reforged;
 
 // TODO: Make this use 32/64-bit structures (for CPU cache to not miss)
 // 33 bytes
-[StructLayout(LayoutKind.Sequential, Pack = 1)]
+[StructLayout(LayoutKind.Sequential)]
 public struct PhysicsBodyData
 {
     public float ForceX, ForceY, Torque;
     public float InvMass, InvI;
     public float LinearDamping, AngularDamping;
     public float GravityScale; 
-    public byte IsDynamic; // bool
+    public int IsDynamic;
 }
 
 public static class ReforgedNative
@@ -25,6 +25,11 @@ public static class ReforgedNative
     public static unsafe extern void IntegrateVelocitiesNative(Vector2* vels, float* angVels, PhysicsBodyData* data, int count, float dt, float gravX, float gravY);
     [DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
     public static unsafe extern void IntegratePositionsNative(Vector2* positions, float* angles, Vector2* vels, float* angVels, int count, float dt, float maxVel, float maxAngVel);
+
+    [DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
+    public static unsafe extern void WarmStartNative(void* constraints, int count, float* linearVelocities, float* angularVelocities, int bodyOffset);
+    [DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
+    public static unsafe extern void SolveVelocityConstraintsNative(void* constraints, int count, float* linearVelocities, float* angularVelocities, int bodyOffset);
 
     [DllImport(LibPath)] public static extern void reforged_tick_begin();
     [DllImport(LibPath)] public static extern void reforged_tick_end();
@@ -49,12 +54,12 @@ public static class ReforgedNative
         catch (DllNotFoundException) 
         {
             IsNativeEnabled = false;
-            Log("Native library NOT FOUND. Using C# fallback.");
+            Log("Native library NOT FOUND. Using C# fallback (Are we client ?)");
         }
         catch (Exception e)
         {
             IsNativeEnabled = false;
-            Log($"Native library error: {e.Message}. Using C# fallback.");
+            Log($"Native library error: {e.Message}. Using C# fallback (Are we client ?)");
         }
     }
 

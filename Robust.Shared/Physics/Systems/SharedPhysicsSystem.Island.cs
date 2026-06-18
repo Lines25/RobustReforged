@@ -764,7 +764,7 @@ public abstract partial class SharedPhysicsSystem
                     InvMass = body.InvMass, InvI = body.InvI,
                     LinearDamping = body.LinearDamping, AngularDamping = body.AngularDamping,
                     GravityScale = body.IgnoreGravity ? 0f : 1f,
-                    IsDynamic = body.BodyType == BodyType.Dynamic ? (byte)1 : (byte)0, // When Microsoft will make easily used NON-CLASS bool-to-byte converter ??
+                    IsDynamic = body.BodyType == BodyType.Dynamic ? 1 : 0,
                 };
             }
 
@@ -814,8 +814,22 @@ public abstract partial class SharedPhysicsSystem
         ResetSolver(in data, in island, velocityConstraints, positionConstraints);
         InitializeVelocityConstraints(in data, in island, velocityConstraints, positionConstraints, positions, angles, linearVelocities, angularVelocities);
 
-        if (data.WarmStarting)
-            WarmStart(in data, in island, velocityConstraints, linearVelocities, angularVelocities);
+        if (data.WarmStarting) {
+        	if (ReforgedNative.IsNativeEnabled)
+        	{
+        	    unsafe 
+        	    {
+        	        fixed (ContactVelocityConstraint* pConstraints = velocityConstraints)
+        	        fixed (Vector2* pLinVels = &linearVelocities[offset])
+        	        fixed (float* pAngVels = &angularVelocities[offset])
+        	        {
+        	            ReforgedNative.WarmStartNative(pConstraints, contactCount, (float*)pLinVels, pAngVels, 0);
+        	        }
+        	    }
+        	} else {
+        		WarmStart(in data, in island, velocityConstraints, linearVelocities, angularVelocities);
+        	}
+        }
 
         var jointCount = island.Joints.Count;
         for (var i = 0; i < jointCount; i++) {
