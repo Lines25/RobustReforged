@@ -764,7 +764,7 @@ public abstract partial class SharedPhysicsSystem
                 positions[i] = Physics.Transform.Mul(transform, body.LocalCenter);
                 angles[i] = transform.Quaternion2D.Angle;
 
-                linearVelocities[offset + i] = body.LinearVelocity;
+				linearVelocities[offset + i] = body.LinearVelocity;
                 angularVelocities[offset + i] = body.AngularVelocity;
 
                 bodyData[i] = new PhysicsBodyData
@@ -772,11 +772,12 @@ public abstract partial class SharedPhysicsSystem
                     ForceX = body.Force.X,
                     ForceY = body.Force.Y,
                     Torque = body.Torque,
-                    InvMass = body.BodyType == BodyType.Dynamic ? body.InvMass : 0f,
-                    InvI = body.BodyType == BodyType.Dynamic ? body.InvI : 0f,
+                    InvMass = body.InvMass,
+                    InvI = body.InvI,
                     LinearDamping = body.LinearDamping,
                     AngularDamping = body.AngularDamping,
-                    GravityScale = body.IgnoreGravity ? 0f : 1f
+                    GravityScale = body.IgnoreGravity ? 0f : 1f,
+                    IsDynamic = body.BodyType == BodyType.Dynamic ? (byte)1 : (byte)0
                 };
             }
 
@@ -839,9 +840,35 @@ public abstract partial class SharedPhysicsSystem
         ResetSolver(in data, in island, velocityConstraints, positionConstraints);
         InitializeVelocityConstraints(in data, in island, velocityConstraints, positionConstraints, positions, angles, linearVelocities, angularVelocities);
 
-        if (data.WarmStarting)
+		if (data.WarmStarting)
         {
-            WarmStart(in data, in island, velocityConstraints, linearVelocities, angularVelocities);
+            if (ReforgedNative.IsNativeEnabled)
+            {
+                unsafe 
+                {
+                    fixed (ContactVelocityConstraint* pConstraints = velocityConstraints)
+                    fixed (Vector2* pLinVels = &linearVelocities[offset])
+                    fixed (float* pAngVels = &angularVelocities[offset])
+                    {
+                        ReforgedNative.WarmStartNative(pConstraints, contactCount, (float*)pLinVels, pAngVels, 0);
+                    }
+                }
+            } 
+            else 
+            {
+                WarmStart(in data, in island, velocityConstraints, linearVelocities, angularVelocities);
+            }
+        }
+
+        var jointCount = island.Joints.Count;
+        for (var i = 0; i < jointCount; i++)
+        {
+            var joint = island.Joints[i].Joint;
+            if (!joint.Enabled) continue;
+
+            var bodyA = PhysicsQuery.GetComponent(joint.BodyAUid);
+            var bodyB = PhysicsQuery.GetComponent(joint.BodyBUid);
+            joint.InitVelocityConstraints(in data, in island, bodyA, bodyB, positions, angles, linearVelocities, angularVelocities);
         }
 
         var jointCount = island.Joints.Count;

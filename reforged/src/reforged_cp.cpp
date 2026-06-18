@@ -19,37 +19,39 @@ static inline void mul_mat2_vec2(const float m[4], float ax, float ay, float& rx
 }
 
 // apply impulse to body pair
+// this are fuckin' HUGE params
 static inline void _rg_apply_impulse_pair(float P1x, float P1y, float P2x, float P2y, float cp1_rAx, float cp1_rAy, float cp2_rAx, float cp2_rAy, float cp1_rBx, float cp1_rBy, float cp2_rBx, float cp2_rBy, float mA, float iA, float mB, float iB, float& vAx, float& vAy, float& wA, float& vBx, float& vBy, float& wB) {
-    vAx -= (P1x + P2x) * mA;
-    vAy -= (P1y + P2y) * mA;
+    const float Psum_x = P1x + P2x;
+    const float Psum_y = P1y + P2y;
+
+    vAx -= Psum_x * mA;
+    vAy -= Psum_y * mA;
     wA  -= iA * (cross_vv(cp1_rAx, cp1_rAy, P1x, P1y) + cross_vv(cp2_rAx, cp2_rAy, P2x, P2y));
-    vBx += (P1x + P2x) * mB;
-    vBy += (P1y + P2y) * mB;
+    vBx += Psum_x * mB;
+    vBy += Psum_y * mB;
     wB  += iB * (cross_vv(cp1_rBx, cp1_rBy, P1x, P1y) + cross_vv(cp2_rBx, cp2_rBy, P2x, P2y));
 }
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 //SharedPhysicsSystem.WarmStart()
-REFORGED_API void WarmStartNative(NativeContactVelocityConstraint* constraints, int count, float* linearVelocities, float* angularVelocities, int bodyOffset) {
+REFORGED_API void WarmStartNative(NativeContactVelocityConstraint* __restrict__ constraints, int count, float* __restrict__ linearVelocities, float* __restrict__ angularVelocities, int bodyOffset) {
     for (int i = 0; i < count; ++i) {
         NativeContactVelocityConstraint& vc = constraints[i];
 
         const int iaIdx = bodyOffset + vc.indexA;
         const int ibIdx = bodyOffset + vc.indexB;
 
-        float& vAx = linearVelocities[iaIdx * 2];
-        float& vAy = linearVelocities[iaIdx * 2 + 1];
-        float& wA  = angularVelocities[iaIdx];
-        float& vBx = linearVelocities[ibIdx * 2];
-        float& vBy = linearVelocities[ibIdx * 2 + 1];
-        float& wB  = angularVelocities[ibIdx];
+        float vAx_val = linearVelocities[iaIdx * 2];
+        float vAy_val = linearVelocities[iaIdx * 2 + 1];
+        float wA_val  = angularVelocities[iaIdx];
+        float vBx_val = linearVelocities[ibIdx * 2];
+        float vBy_val = linearVelocities[ibIdx * 2 + 1];
+        float wB_val  = angularVelocities[ibIdx];
 
         const float nx = vc.normalX;
         const float ny = vc.normalY;
-        // tangent = Cross(normal, 1.0f) = (ny, -nx)
         const float tx = ny;
         const float ty = -nx;
 
@@ -64,14 +66,21 @@ REFORGED_API void WarmStartNative(NativeContactVelocityConstraint* constraints, 
             const float Px = nx * vcp.normalImpulse + tx * vcp.tangentImpulse;
             const float Py = ny * vcp.normalImpulse + ty * vcp.tangentImpulse;
 
-            wA  -= invIA * cross_vv(vcp.relVelAx, vcp.relVelAy, Px, Py);
-            vAx -= Px * invMassA;
-            vAy -= Py * invMassA;
+            wA_val  -= invIA * cross_vv(vcp.relVelAx, vcp.relVelAy, Px, Py);
+            vAx_val -= Px * invMassA;
+            vAy_val -= Py * invMassA;
 
-            wB  += invIB * cross_vv(vcp.relVelBx, vcp.relVelBy, Px, Py);
-            vBx += Px * invMassB;
-            vBy += Py * invMassB;
+            wB_val  += invIB * cross_vv(vcp.relVelBx, vcp.relVelBy, Px, Py);
+            vBx_val += Px * invMassB;
+            vBy_val += Py * invMassB;
         }
+
+        linearVelocities[iaIdx * 2]     = vAx_val;
+        linearVelocities[iaIdx * 2 + 1] = vAy_val;
+        angularVelocities[iaIdx]        = wA_val;
+        linearVelocities[ibIdx * 2]     = vBx_val;
+        linearVelocities[ibIdx * 2 + 1] = vBy_val;
+        angularVelocities[ibIdx]        = wB_val;
     }
 }
 

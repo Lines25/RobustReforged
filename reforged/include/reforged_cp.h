@@ -34,10 +34,10 @@ extern "C" {
 #endif
 
 REFORGED_API void SolveVelocityConstraintsNative(
-    NativeContactVelocityConstraint* constraints,
+    NativeContactVelocityConstraint* __restrict__ constraints,
     int count,
-    float* linearVelocities,  // [x0,y0,x1,y1,...]
-    float* angularVelocities,
+    float* __restrict__ linearVelocities,  // [x0,y0,x1,y1,...]
+    float* __restrict__ angularVelocities,
     int bodyOffset
 );
 

@@ -28,7 +28,7 @@
 ## Ancient commented code - may be useful idk
 
 CXX = clang++
-CXXFLAGS = -O3 -march=x86-64-v2 -fPIC -shared -std=c++23
+CXXFLAGS = -O3 -march=x86-64-v2 -fopenmp -fPIC -shared -std=c++23
 SRC = $(wildcard reforged/src/*.cpp)
 OUT = reforged/build/libreforged.so
 INCLUDE = -Ireforged/include
