@@ -12,9 +12,10 @@ static int _tick_index = 0;
 static int _tick_count = 0;
 
 static constexpr int MAX_SECTIONS = 1024;
+static constexpr int SECTION_MAX_NAME_LEN = 64;
 
 struct Section {
-    char name[64];
+    char name[SECTION_MAX_NAME_LEN];
     std::chrono::high_resolution_clock::time_point start;
     double total_ms;
     int calls;
@@ -26,11 +27,11 @@ static int _section_count = 0;
 
 static Section* find_or_create_section(const char* name) {
     for (int i = 0; i < _section_count; i++)
-        if (strncmp(_sections[i].name, name, 64) == 0)
+        if (strncmp(_sections[i].name, name, SECTION_MAX_NAME_LEN) == 0)
             return &_sections[i];
     if (_section_count >= MAX_SECTIONS) return nullptr;
     Section* s = &_sections[_section_count++];
-    strncpy(s->name, name, 63);
+    strncpy(s->name, name, SECTION_MAX_NAME_LEN-1);
     s->total_ms = 0.0;
     s->calls = 0;
     s->active = false;
@@ -104,3 +105,4 @@ void reforged_sections_reset(void) {
         _sections[i].calls = 0;
     }
 }
+

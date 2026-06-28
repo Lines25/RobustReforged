@@ -5,7 +5,7 @@ using System.Numerics;
 namespace Robust.Reforged;
 
 // TODO: Make this use 32/64-bit structures (for CPU cache to not miss)
-// 33 bytes
+// 36 bytes
 [StructLayout(LayoutKind.Sequential)]
 public struct PhysicsBodyData
 {
