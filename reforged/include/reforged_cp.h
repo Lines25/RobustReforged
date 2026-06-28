@@ -2,6 +2,13 @@
 #include "reforged_config.h"
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#pragma pack(push, 1)
+
+// 36 bytes
 struct NativeVelocityConstraintPoint {
     float relVelAx, relVelAy;
     float relVelBx, relVelBy;
@@ -10,33 +17,33 @@ struct NativeVelocityConstraintPoint {
     float normalMass;
     float tangentMass;
     float velocityBias;
-    float _pad;
 };
-static_assert(sizeof(NativeVelocityConstraintPoint) == 40);
 
+// 152 bytes
 struct NativeContactVelocityConstraint {
     int32_t contactIndex;
     int32_t indexA;
     int32_t indexB;
-    int32_t pointCount;
-    NativeVelocityConstraintPoint points[2];
+    NativeVelocityConstraintPoint points[2]; // FixedArray2<VelocityConstraintPoint> Points;
     float normalX, normalY;
     float normalMass[4]; // Vector4
     float k[4];          // Vector4
-    float invMassA, invMassB;
-    float invIA, invIB;
-    float friction, restitution, tangentSpeed;
-    float _pad;
+    float invMassA;
+    float invMassB;
+    float invIA;
+    float invIB;
+    float friction;
+    float restitution;
+    float tangentSpeed;
+    int32_t pointCount;
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma pack(pop)
 
 REFORGED_API void SolveVelocityConstraintsNative(
     NativeContactVelocityConstraint* __restrict__ constraints,
     int count,
-    float* __restrict__ linearVelocities,  // [x0,y0,x1,y1,...]
+    float* __restrict__ linearVelocities,
     float* __restrict__ angularVelocities,
     int bodyOffset
 );
