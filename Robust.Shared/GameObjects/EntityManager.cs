@@ -39,7 +39,6 @@ namespace Robust.Shared.GameObjects
         [IoC.Dependency] protected IPrototypeManager PrototypeManager = default!;
         [IoC.Dependency] protected ILogManager LogManager = default!;
         [IoC.Dependency] private IEntitySystemManager _entitySystemManager = default!;
-        [IoC.Dependency] private IMapManager _mapManager = default!;
         [IoC.Dependency] private IGameTiming _gameTiming = default!;
         [IoC.Dependency] private ISerializationManager _serManager = default!;
         [IoC.Dependency] private ProfManager _prof = default!;
@@ -366,7 +365,7 @@ namespace Robust.Shared.GameObjects
                 throw new ArgumentException($"Attempted to spawn entity on an invalid map. Coordinates: {coordinates}");
 
             EntityCoordinates coords;
-            if (_mapManager.TryFindGridAt(coordinates, out var gridUid, out var grid)
+            if (_mapSystem.TryFindGridAt(coordinates, out var gridUid, out var grid)
                 && MetaQuery.TryGetComponentInternal(gridUid, out var meta)
                 && meta.EntityLifeStage < EntityLifeStage.Terminating)
             {
