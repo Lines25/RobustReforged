@@ -354,9 +354,9 @@ namespace Robust.Shared.GameObjects
 
                     using (_profManager.Value(updReg.ProfileName))
                     {
-	                    ReforgedNative.reforged_section_begin(sysName);
+	                    ReforgedNative.reforged_section_begin(updReg.ProfileName);
                         updReg.System.Update(frameTime);
-	                    ReforgedNative.reforged_section_end(sysName);
+	                    ReforgedNative.reforged_section_end(updReg.ProfileName);
                     }
                     //if (sw.Elapsed.TotalMilliseconds > 1.0)
                     //{
