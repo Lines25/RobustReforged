@@ -70,12 +70,12 @@ OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	@echo "  LD       $@"
+	@echo "  LD       $@ -> $@"
 	@$(call MKDIR,$(@D))
 	@$(CXX) $(CXXFLAGS) -shared $^ -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@echo "  CXX      $<"
+	@echo "  CXX      $< -> $@"
 	@$(call MKDIR,$(@D))
 	@$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
