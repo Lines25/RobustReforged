@@ -66,7 +66,7 @@ namespace Robust.Shared.GameObjects
         private bool _initialized;
 
         [ViewVariables] private UpdateReg[] _updateOrder = Array.Empty<UpdateReg>();
-        [ViewVariables] private IEntitySystem[] _frameUpdateOrder = Array.Empty<IEntitySystem>();
+        [ViewVariables] private FrameUpdateReg[] _frameUpdateOrder = Array.Empty<FrameUpdateReg>();
 
         public bool MetricsEnabled { get; set; }
 
@@ -222,12 +222,24 @@ namespace Robust.Shared.GameObjects
             // Create update order for entity systems.
             var (fUpdate, update) = CalculateUpdateOrder(_systemTypes, subTypes, SystemDependencyCollection);
 
-            _frameUpdateOrder = fUpdate.ToArray();
             _updateOrder = update
-                .Select(s => new UpdateReg
+                .Select(s =>
+                {
+                    var profileName = s.GetType().Name;
+                    return new UpdateReg
+                    {
+                        System = s,
+                        ProfileName = profileName,
+                        Monitor = _tickUsageHistogram.WithLabels(profileName)
+                    };
+                })
+                .ToArray();
+
+            _frameUpdateOrder = fUpdate
+                .Select(s => new FrameUpdateReg
                 {
                     System = s,
-                    Monitor = _tickUsageHistogram.WithLabels(s.GetType().Name)
+                    ProfileName = s.GetType().Name
                 })
                 .ToArray();
 
@@ -311,7 +323,7 @@ namespace Robust.Shared.GameObjects
             _extraLoadedTypes.Clear();
             _systemTypes.Clear();
             _updateOrder = Array.Empty<UpdateReg>();
-            _frameUpdateOrder = Array.Empty<IEntitySystem>();
+            _frameUpdateOrder = Array.Empty<FrameUpdateReg>();
             _initialized = false;
             SystemDependencyCollection?.Clear();
         }
@@ -332,16 +344,25 @@ namespace Robust.Shared.GameObjects
                 try
                 {
 #endif
-            		var sw = ProfSampler.StartNew();
-					var sysName = updReg.System.GetType().Name;
-                    ReforgedNative.reforged_section_begin(sysName);
-                    updReg.System.Update(frameTime);
-                    ReforgedNative.reforged_section_end(sysName);
-                    _profManager.WriteValue(sysName, sw);
+					//Anyone who reads this.. this is for meging :3
+            		//var sw = ProfSampler.StartNew();
+					//var sysName = updReg.System.GetType().Name;
+                    //ReforgedNative.reforged_section_begin(sysName);
+                    //updReg.System.Update(frameTime);
+                    //ReforgedNative.reforged_section_end(sysName);
+                    //_profManager.WriteValue(sysName, sw);
+
+                    using (_profManager.Value(updReg.ProfileName))
+                    {
+	                    ReforgedNative.reforged_section_begin(sysName);
+                        updReg.System.Update(frameTime);
+	                    ReforgedNative.reforged_section_end(sysName);
+                    }
                     //if (sw.Elapsed.TotalMilliseconds > 1.0)
                     //{
                     //    _sawmill.Info($"[SLOW SYSTEM] {updReg.System.GetType().Name}: {sw.Elapsed.TotalMilliseconds:F2}ms");
                     //}
+
 #if EXCEPTION_TOLERANCE
                 }
                 catch (Exception e)
@@ -360,15 +381,15 @@ namespace Robust.Shared.GameObjects
         /// <inheritdoc />
         public void FrameUpdate(float frameTime)
         {
-            foreach (var system in _frameUpdateOrder)
+            foreach (var updReg in _frameUpdateOrder)
             {
 #if EXCEPTION_TOLERANCE
                 try
                 {
 #endif
-                    using (_profManager.Value(system.GetType().Name))
+                    using (_profManager.Value(updReg.ProfileName))
                     {
-                        system.FrameUpdate(frameTime);
+                        updReg.System.FrameUpdate(frameTime);
                     }
 #if EXCEPTION_TOLERANCE
                 }
@@ -436,12 +457,24 @@ namespace Robust.Shared.GameObjects
             return mFrameUpdate!.DeclaringType != typeof(EntitySystem);
         }
 
-        internal IEnumerable<Type> FrameUpdateOrder => _frameUpdateOrder.Select(c => c.GetType());
+        internal IEnumerable<Type> FrameUpdateOrder => _frameUpdateOrder.Select(c => c.System.GetType());
         internal IEnumerable<Type> TickUpdateOrder => _updateOrder.Select(c => c.System.GetType());
+
+        private struct FrameUpdateReg
+        {
+            [ViewVariables] public IEntitySystem System;
+            [ViewVariables] public string ProfileName;
+
+            public override string? ToString()
+            {
+                return System.ToString();
+            }
+        }
 
         private struct UpdateReg
         {
             [ViewVariables] public IEntitySystem System;
+            [ViewVariables] public string ProfileName;
             [ViewVariables] public Histogram.Child Monitor;
 
             public override string? ToString()
