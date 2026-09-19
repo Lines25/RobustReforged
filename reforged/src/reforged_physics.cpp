@@ -1,4 +1,3 @@
-#include <omp.h>
 #include <cmath>
 #include "reforged_config.h"
 #include "reforged_physics.h"
@@ -8,7 +7,6 @@ extern "C" {
 #endif
 
 // Компілятор (з -ffast-math) автоматично замінить це на апаратну інструкцію RSQRT (для векторів - rsqrtps).
-// Це набагато безпечніше і швидше для SIMD циклів, ніж ручні скалярні інструкції _mm_set_ss.
 static inline float _rg_rsqrt(float x) {
     return 1.0f / std::sqrt(std::fmax(x, 0.00001f));
 }
@@ -26,18 +24,15 @@ REFORGED_API void IntegrateVelocitiesNative(
     float gravX, 
     float gravY) 
 {
-    // Звичайний parallel for (без simd). 
-    // Завдяки 'continue' ми оберігаємо пам'ять від непотрібного перезапису для статичних тіл (економить Cache Bandwidth).
-    #pragma omp parallel for if(count >= REFORGED_INTEGRATE_OMP_COUNT) schedule(static)
+    // Завдяки __restrict__ компілятор і сам зробить векторизацію, де це безпечно.
     for (int i = 0; i < count; ++i) {
         
         // Якщо тіло статичне - просто ігноруємо.
         if (!data[i].isDynamic) continue;
 
-        const int i2 = i * 2; // Швидше, ніж зсув (i << 1), хоча компілятор сам оптимізує
+        const int i2 = i * 2;
         const float im = data[i].invMass;
 
-        // Зчитуємо старі швидкості локально
         float vx = vels[i2];
         float vy = vels[i2+1];
         float av = angVels[i];
@@ -53,7 +48,6 @@ REFORGED_API void IntegrateVelocitiesNative(
         vy *= ld;
         av *= ad;
 
-        // Записуємо результати 1 раз
         vels[i2]   = vx;
         vels[i2+1] = vy;
         angVels[i] = av;
@@ -72,9 +66,8 @@ REFORGED_API void IntegratePositionsNative(
 {
     const float maxVelSq = maxVel * maxVel;
 
-    // Тут ми використовуємо SIMD, оскільки код всередині БЕЗРОЗГАЛУЖЕНИЙ (branchless).
-    // Процесор братиме по 4/8 тіл за раз і опрацьовуватиме їх паралельно векторними регістрами!
-    #pragma omp parallel for simd if(count >= REFORGED_INTEGRATE_OMP_COUNT) schedule(static)
+    // Відсутність #pragma omp збереже нас від крашу пам'яті через вирівнювання C# GC.
+    // Автовекторизатор компілятора зробить тут свою магію.
     for (int i = 0; i < count; ++i) {
         const int i2 = i * 2;
         
@@ -84,7 +77,6 @@ REFORGED_API void IntegratePositionsNative(
 
         const float vSqr = vx * vx + vy * vy;
         
-        // Branchless ліміт лінійної швидкості (через тернарний оператор компілятор зробить CMOV/VBLENDPS)
         const float ratio = (vSqr > maxVelSq) ? (maxVel * _rg_rsqrt(vSqr)) : 1.0f;
         vx *= ratio;
         vy *= ratio;
@@ -92,7 +84,6 @@ REFORGED_API void IntegratePositionsNative(
         vels[i2]   = vx;
         vels[i2+1] = vy;
 
-        // Branchless ліміт кутової швидкості
         const float clampedAv = std::fmin(std::abs(av), maxAngVel);
         av = std::copysign(clampedAv, av);
         angVels[i] = av;

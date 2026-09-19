@@ -219,6 +219,20 @@ public abstract partial class SharedPhysicsSystem
         Subs.CVar(_cfg, CVars.TimeToSleep, SetTimeToSleep, true);
         Subs.CVar(_cfg, CVars.VelocityThreshold, SetVelocityThreshold, true);
         Subs.CVar(_cfg, CVars.Baumgarte, SetBaumgarte, true);
+
+		ReforgedNative.Log("--- DUMP MEMORY LAYOUT ---");
+        ReforgedNative.Log($"ContactVelocityConstraint Size: {System.Runtime.InteropServices.Marshal.SizeOf<ContactVelocityConstraint>()}");
+        foreach (var field in typeof(ContactVelocityConstraint).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+        {
+            ReforgedNative.Log($"{System.Runtime.InteropServices.Marshal.OffsetOf<ContactVelocityConstraint>(field.Name)}: {field.Name}");
+        }
+
+        ReforgedNative.Log($"VelocityConstraintPoint Size: {System.Runtime.InteropServices.Marshal.SizeOf<VelocityConstraintPoint>()}");
+        foreach (var field in typeof(VelocityConstraintPoint).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+        {
+            ReforgedNative.Log($"{System.Runtime.InteropServices.Marshal.OffsetOf<VelocityConstraintPoint>(field.Name)}: {field.Name}");
+        }
+        ReforgedNative.Log("--------------------------");
     }
 
     private void SetWarmStarting(bool value) => _warmStarting = value;
