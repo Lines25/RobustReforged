@@ -16,10 +16,7 @@ Also, if you have error like `"libreforged.so" failed to load: No such file or d
 ### Currently supported platforms: Linux x86, Linux x86-64, (Windows x86), (Windows x86-64)
 *In () - must work but not tested*
 
-### Results
-**TESTED ON i5-12500H**
-
-Default engine tick time (1 player, dev map)
+### Currently, by all tests, it's giving x4-x6 times improve. Tests will be published... Ehhmm... Someday ig
 
 ### Default RobustToolbox readme now..
 
