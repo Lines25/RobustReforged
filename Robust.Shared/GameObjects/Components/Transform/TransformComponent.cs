@@ -353,10 +353,11 @@ namespace Robust.Shared.GameObjects
         /// <summary>
         /// Is this transform anchored to a grid tile?
         /// </summary>
-        [ViewVariables]
+		[ViewVariables(VVAccess.ReadWrite)]
         public bool Anchored
         {
             get => _anchored;
+            set => _entMan.System<SharedTransformSystem>().SetAnchored((Owner, this), value);
         }
 
         [ViewVariables(VVAccess.ReadWrite)]
