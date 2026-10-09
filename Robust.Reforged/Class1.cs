@@ -3,24 +3,23 @@ using System.Numerics;
 
 namespace Robust.Reforged;
 
-[StructLayout(LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct PhysicsBodyData
 {
-    public float PosX, PosY;
-    public float VelX, VelY;
-    public float AngVel;
-    public float Friction;
-    public float AngDamping;
-    public float InvMass;
-    public float InvI;
     public float ForceX, ForceY;
     public float Torque;
+    public float InvMass;
+    public float InvI;
+    public float LinearDamping;
+    public float AngularDamping;
+    public float GravityScale; // 1.0f - default; 0.0f - IgnoreGravity
 }
 
 public static class ReforgedNative
 {
     const string LibPath = "libreforged";
 
+	// reforged.cpp
 	[DllImport(LibPath)] public static extern void reforged_tick_begin();
 	[DllImport(LibPath)] public static extern void reforged_tick_end();
 	[DllImport(LibPath)] public static extern IntPtr reforged_hello();
@@ -32,12 +31,9 @@ public static class ReforgedNative
 	[DllImport(LibPath)] public static extern void reforged_sections_report(byte[] buf, int size);
 	[DllImport(LibPath)] public static extern void reforged_sections_reset();
 
+	// reforged_physics.cpp
 	[DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
-    public static unsafe extern void StepPhysicsParallel(PhysicsBodyData* bodies, int count, float frameTime);
-    [DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
-    public static unsafe extern void IntegratePositionsNative(Vector2* positions, float* angles, Vector2* vels, float* angVels, int count, float dt, float maxVel, float maxAngVel);
-    [DllImport(LibPath, CallingConvention = CallingConvention.Cdecl)]
-    public static unsafe extern void IntegrateAllParallel(Vector2* positions, float* angles, Vector2* vels, float* angVels, float* forces, float* torques, float* invMasses, float* invIs, float* frictions, float* angDamps, int count, float dt, float maxVel, float maxAngVel);
+	public static unsafe extern void IntegrateAllParallel(Vector2* positions, float* angles, Vector2* vels, float* angVels, PhysicsBodyData* bodyData, int count, float dt, float gravX, float gravY, float maxVel, float maxAngVel);
 
 	public static void Load()
 	{

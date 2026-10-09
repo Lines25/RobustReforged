@@ -12,28 +12,16 @@
 extern "C" {
 #endif
 
-typedef struct PhysicsBodyData {
-    float PosX, PosY;
-    float VelX, VelY;
-    float AngVel;
-    float Friction;
-    float AngDamping;
-    float InvMass;
-    float InvI;
-    float ForceX, ForceY;
-    float Torque;
-} PhysicsBodyData;
+#pragma pack(push, 1)
+struct PhysicsBodyData {
+    float fx, fy, torque;
+    float invMass, invI;
+    float linDamp, angDamp;
+    float gravityScale;
+};
+#pragma pack(pop)
 
-REFORGED_API void IntegrateAllParallel(
-    float* positions, float* angles,
-    float* vels, float* angVels,
-    const float* forces, const float* torques,
-    const float* invMasses, const float* invI,
-    const float* friction, const float* angDamp,
-    int count, float dt, float maxVel, float maxAngVel);
-
-REFORGED_API void StepPhysicsParallel(PhysicsBodyData* bodies, int count, float frameTime);
-REFORGED_API void IntegratePositionsNative(float* positions, float* angles, float* vels, float* angVels, int count, float dt, float maxVel, float maxAngVel);
+REFORGED_API void IntegrateAllParallel(float* __restrict__ positions, float* __restrict__ angles, float* __restrict__ vels, float* __restrict__ angVels, const PhysicsBodyData* __restrict__ data, int count, float dt, float gravX, float gravY, float maxVel, float maxAngVel);
 
 #ifdef __cplusplus
 }

@@ -727,7 +727,7 @@ public abstract partial class SharedPhysicsSystem
 
     }
 
-    /// <summary>
+	/// <summary>
     ///     Go through all the bodies in this island and solve.
     /// </summary>
     private void SolveIsland(
@@ -743,62 +743,100 @@ public abstract partial class SharedPhysicsSystem
         var bodyCount = island.Bodies.Count;
         var positions = ArrayPool<Vector2>.Shared.Rent(bodyCount);
         var angles = ArrayPool<float>.Shared.Rent(bodyCount);
+        PhysicsBodyData[]? bodyData = null;
+
         var offset = island.Offset;
         var gravity = Gravity;
+        var dt = data.FrameTime;
 
-
-        for (var i = 0; i < island.Bodies.Count; i++)
+        if (ReforgedNative.IsNativeEnabled)
         {
-            var bodyEnt = island.Bodies[i];
-            var body = bodyEnt.Comp1;
-            var xform = bodyEnt.Comp2;
-            var (worldPos, worldRot) =
-                _transform.GetWorldPositionRotation(xform);
+            bodyData = ArrayPool<PhysicsBodyData>.Shared.Rent(bodyCount);
+            for (var i = 0; i < bodyCount; i++)
+            {
+                var bodyEnt = island.Bodies[i];
+                var body = bodyEnt.Comp1;
+                var xform = bodyEnt.Comp2;
 
-            var transform = new Transform(worldPos, worldRot);
-            var position = Physics.Transform.Mul(transform, body.LocalCenter);
-            // DebugTools.Assert(!float.IsNaN(position.X) && !float.IsNaN(position.Y));
-            var angle = transform.Quaternion2D.Angle;
+                var (worldPos, worldRot) = _transform.GetWorldPositionRotation(xform);
+                var transform = new Transform(worldPos, worldRot);
+                
+                positions[i] = Physics.Transform.Mul(transform, body.LocalCenter);
+                angles[i] = transform.Quaternion2D.Angle;
 
-            // var bodyTransform = body.GetTransform();
-            // DebugTools.Assert(bodyTransform.Position.EqualsApprox(position) && MathHelper.CloseTo(angle, bodyTransform.Quaternion2D.Angle));
+                linearVelocities[offset + i] = body.LinearVelocity;
+                angularVelocities[offset + i] = body.AngularVelocity;
 
-            var linearVelocity = body.LinearVelocity;
-            var angularVelocity = body.AngularVelocity;
+                bodyData[i] = new PhysicsBodyData
+                {
+                    ForceX = body.Force.X,
+                    ForceY = body.Force.Y,
+                    Torque = body.Torque,
+                    InvMass = body.BodyType == BodyType.Dynamic ? body.InvMass : 0f,
+                    InvI = body.BodyType == BodyType.Dynamic ? body.InvI : 0f,
+                    LinearDamping = body.LinearDamping,
+                    AngularDamping = body.AngularDamping,
+                    GravityScale = body.IgnoreGravity ? 0f : 1f
+                };
+            }
 
-            // if the body cannot move, nothing to do here
-            // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
-            //if (body.BodyType == BodyType.Dynamic)
-            //{
-            //    if (body.IgnoreGravity)
-            //    {
-            //        linearVelocity += body.Force * data.FrameTime * body.InvMass;
-            //    }
-            //    else
-            //    {
-            //        linearVelocity += (gravity + body.Force * body.InvMass) * data.FrameTime;
-            //    }
-			//
-            //    angularVelocity += body.InvI * body.Torque * data.FrameTime;
-			//
-            //    linearVelocity *= Math.Clamp(1.0f - data.FrameTime * body.LinearDamping, 0.0f, 1.0f);
-            //    angularVelocity *= Math.Clamp(1.0f - data.FrameTime * body.AngularDamping, 0.0f, 1.0f);
-            //}
-            // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
+            unsafe
+            {
+                fixed (Vector2* pPos = positions)
+                fixed (float* pAng = angles)
+                fixed (Vector2* pVel = &linearVelocities[offset])
+                fixed (float* pAngVel = &angularVelocities[offset])
+                fixed (PhysicsBodyData* pData = bodyData)
+                {
+                    ReforgedNative.IntegrateAllParallel(
+                        pPos, 
+                        pAng, 
+                        pVel, 
+                        pAngVel, 
+                        pData, 
+                        bodyCount, 
+                        data.FrameTime, 
+                        gravity.X, 
+                        gravity.Y, 
+                        data.MaxLinearVelocity, 
+                        data.MaxAngularVelocity);
+                }
+            }
+        }
+        else // Fallback
+        {
+            for (var i = 0; i < bodyCount; i++)
+            {
+                var bodyEnt = island.Bodies[i];
+                var body = bodyEnt.Comp1;
+                var (worldPos, worldRot) = _transform.GetWorldPositionRotation(bodyEnt.Comp2);
+                var transform = new Transform(worldPos, worldRot);
 
-            positions[i] = position;
-            angles[i] = angle;
-            linearVelocities[i + offset] = linearVelocity;
-            angularVelocities[i + offset] = angularVelocity;
+                positions[i] = Physics.Transform.Mul(transform, body.LocalCenter);
+                angles[i] = transform.Quaternion2D.Angle;
+
+                var v = body.LinearVelocity;
+                var av = body.AngularVelocity;
+
+                if (body.BodyType == BodyType.Dynamic)
+                {
+                    var g = body.IgnoreGravity ? Vector2.Zero : gravity;
+                    v += (g + body.Force * body.InvMass) * dt;
+                    av += body.InvI * body.Torque * dt;
+                    v *= Math.Clamp(1.0f - dt * body.LinearDamping, 0.0f, 1.0f);
+                    av *= Math.Clamp(1.0f - dt * body.AngularDamping, 0.0f, 1.0f);
+                }
+
+                linearVelocities[i + offset] = v;
+                angularVelocities[i + offset] = av;
+            }
         }
 
         var contactCount = island.Contacts.Count;
         var velocityConstraints = ArrayPool<ContactVelocityConstraint>.Shared.Rent(contactCount);
         var positionConstraints = ArrayPool<ContactPositionConstraint>.Shared.Rent(contactCount);
 
-        // Pass the data into the solver
         ResetSolver(in data, in island, velocityConstraints, positionConstraints);
-
         InitializeVelocityConstraints(in data, in island, velocityConstraints, positionConstraints, positions, angles, linearVelocities, angularVelocities);
 
         if (data.WarmStarting)
@@ -807,34 +845,26 @@ public abstract partial class SharedPhysicsSystem
         }
 
         var jointCount = island.Joints.Count;
-
-        if (jointCount > 0)
+        for (var i = 0; i < jointCount; i++)
         {
-            for (var i = 0; i < island.Joints.Count; i++)
-            {
-                var joint = island.Joints[i].Joint;
-                if (!joint.Enabled) continue;
+            var joint = island.Joints[i].Joint;
+            if (!joint.Enabled) continue;
 
-                var bodyA = PhysicsQuery.GetComponent(joint.BodyAUid);
-                var bodyB = PhysicsQuery.GetComponent(joint.BodyBUid);
-                joint.InitVelocityConstraints(in data, in island, bodyA, bodyB, positions, angles, linearVelocities, angularVelocities);
-            }
+            var bodyA = PhysicsQuery.GetComponent(joint.BodyAUid);
+            var bodyB = PhysicsQuery.GetComponent(joint.BodyBUid);
+            joint.InitVelocityConstraints(in data, in island, bodyA, bodyB, positions, angles, linearVelocities, angularVelocities);
         }
 
-        // Velocity solver
+        // Solve Velocities
         for (var i = 0; i < data.VelocityIterations; i++)
         {
             for (var j = 0; j < jointCount; ++j)
             {
                 var joint = island.Joints[j].Joint;
-
-                if (!joint.Enabled)
-                    continue;
+                if (!joint.Enabled) continue;
 
                 joint.SolveVelocityConstraints(in data, in island, linearVelocities, angularVelocities);
-
                 var error = joint.Validate(data.InvDt);
-
                 if (error > 0.0f)
                     island.BrokenJoints.Add((island.Joints[j].Original, error));
             }
@@ -842,113 +872,49 @@ public abstract partial class SharedPhysicsSystem
             SolveVelocityConstraints(in island, velocityConstraints, linearVelocities, angularVelocities);
         }
 
-        // Store for warm starting.
         StoreImpulses(in island, velocityConstraints);
 
-        var maxVel = data.MaxTranslation / data.FrameTime;
-        var maxVelSq = maxVel * maxVel;
-        var maxAngVel = data.MaxRotation / data.FrameTime;
-        var maxAngVelSq = maxAngVel * maxAngVel;
-
-        // Integrate positions
-        // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
-        //for (var i = 0; i < bodyCount; i++)
-        //{
-        //    var linearVelocity = linearVelocities[offset + i];
-        //    var angularVelocity = angularVelocities[offset + i];
-		//
-        //    var velSqr = linearVelocity.LengthSquared();
-        //    if (velSqr > maxVelSq)
-        //    {
-        //        linearVelocity *= maxVel / MathF.Sqrt(velSqr);
-        //        linearVelocities[offset + i] = linearVelocity;
-        //    }
-		//
-        //    if (angularVelocity * angularVelocity > maxAngVelSq)
-        //    {
-        //        angularVelocity *= maxAngVel / MathF.Abs(angularVelocity);
-        //        angularVelocities[offset + i] = angularVelocity;
-        //    }
-		//
-        //    // Integrate
-        //    positions[i] += linearVelocity * data.FrameTime;
-        //    angles[i] += angularVelocity * data.FrameTime;
-        //}
-
-        //unsafe
-        //{
-        //    fixed (Vector2* pPos = positions)
-        //    fixed (float* pAng = angles)
-        //    fixed (Vector2* pVel = &linearVelocities[offset])
-        //    fixed (float* pAngVel = &angularVelocities[offset])
-        //    {
-        //        ReforgedNative.IntegratePositionsNative(
-        //            pPos, pAng, pVel, pAngVel, 
-        //            bodyCount, data.FrameTime, maxVel, maxAngVel);
-        //    }
-        //}
-		// * Reforged: Super-Fast Native Integration
-        unsafe
+        // Position integration fallback if not done natively
+        if (!ReforgedNative.IsNativeEnabled)
         {
-            var forces = ArrayPool<float>.Shared.Rent(bodyCount * 2);
-            var torques = ArrayPool<float>.Shared.Rent(bodyCount);
-            var invMasses = ArrayPool<float>.Shared.Rent(bodyCount);
-            var invIs = ArrayPool<float>.Shared.Rent(bodyCount);
-            var frictions = ArrayPool<float>.Shared.Rent(bodyCount);
-            var angDamps = ArrayPool<float>.Shared.Rent(bodyCount);
+            var maxVel = data.MaxTranslation / dt;
+            var maxAngVel = data.MaxRotation / dt;
+            var maxVelSq = maxVel * maxVel;
+            var maxAngVelSq = maxAngVel * maxAngVel;
 
-            for (int i = 0; i < bodyCount; i++) {
-                var b = island.Bodies[i].Comp1;
-                forces[i*2] = b.Force.X; forces[i*2+1] = b.Force.Y;
-                torques[i] = b.Torque;
-                invMasses[i] = b.InvMass;
-                invIs[i] = b.InvI;
-                frictions[i] = b.LinearDamping;
-                angDamps[i] = b.AngularDamping;
-            }
-
-            fixed (Vector2* pPos = positions)
-            fixed (float* pAng = angles)
-            fixed (Vector2* pVel = &linearVelocities[offset])
-            fixed (float* pAngVel = &angularVelocities[offset])
-            fixed (float* pForces = forces)
-            fixed (float* pTorques = torques)
-            fixed (float* pInvM = invMasses)
-            fixed (float* pInvI = invIs)
-            fixed (float* pFric = frictions)
-            fixed (float* pADamp = angDamps)
+            for (var i = 0; i < bodyCount; i++)
             {
-                ReforgedNative.IntegrateAllParallel(
-                    pPos, pAng, pVel, pAngVel,
-                    pForces, pTorques, pInvM, pInvI, pFric, pADamp,
-                    bodyCount, data.FrameTime, maxVel, maxAngVel);
+                var v = linearVelocities[offset + i];
+                var av = angularVelocities[offset + i];
+                var vSq = v.LengthSquared();
+                if (vSq > maxVelSq)
+                {
+                    v *= maxVel / MathF.Sqrt(vSq);
+                    linearVelocities[offset + i] = v;
+                }
+                if (av * av > maxAngVelSq)
+                {
+                    av *= maxAngVel / MathF.Abs(av);
+                    angularVelocities[offset + i] = av;
+                }
+                positions[i] += v * dt;
+                angles[i] += av * dt;
             }
-
-            ArrayPool<float>.Shared.Return(forces);
-            ArrayPool<float>.Shared.Return(torques);
-            ArrayPool<float>.Shared.Return(invMasses);
-            ArrayPool<float>.Shared.Return(invIs);
-            ArrayPool<float>.Shared.Return(frictions);
-            ArrayPool<float>.Shared.Return(angDamps);
         }
-        // * Reforged: Replaced by ReforgedNative.StepPhysicsParallel
 
+        // Solve Positions
         island.PositionSolved = false;
-
         for (var i = 0; i < data.PositionIterations; i++)
         {
             var contactsOkay = SolvePositionConstraints(in data, in island, positionConstraints, positions, angles);
             var jointsOkay = true;
 
-            for (var j = 0; j < island.Joints.Count; ++j)
+            for (var j = 0; j < jointCount; ++j)
             {
                 var joint = island.Joints[j].Joint;
-
-                if (!joint.Enabled)
-                    continue;
+                if (!joint.Enabled) continue;
 
                 var jointOkay = joint.SolvePositionConstraints(in data, positions, angles);
-
                 jointsOkay = jointsOkay && jointOkay;
             }
 
@@ -959,21 +925,9 @@ public abstract partial class SharedPhysicsSystem
             }
         }
 
-        // Transform the solved positions back into local terms
-        // This means we can run the entire solver in parallel and not have to worry about stale world positions later
-        // E.g. if a parent had its position updated then our worldposition is invalid
-        // We can safely do this in parallel.
+        FinalisePositions(0, bodyCount, offset, island.Bodies, positions, angles, solvedPositions, solvedAngles);
 
-        // Solve positions now and store for later; we can't write this safely in parallel.
-        var bodies = island.Bodies;
-
-        FinalisePositions(0, bodyCount, offset, bodies, positions, angles, solvedPositions, solvedAngles);
-
-        // Check sleep status for all of the bodies
-        // Writing sleep timer is safe but updating awake or not is not safe.
-
-        // We have a special island for no-contact no-joint bodies and just run this custom sleeping behaviour
-        // for it while still keeping the benefits of a big island.
+        // Sleep
         if (island.LoneIsland)
         {
             if (!prediction && data.SleepAllowed)
@@ -981,7 +935,6 @@ public abstract partial class SharedPhysicsSystem
                 for (var i = 0; i < bodyCount; i++)
                 {
                     var body = island.Bodies[i].Comp1;
-
                     if (body.BodyType == BodyType.Static) continue;
 
                     if (!body.SleepingAllowed ||
@@ -992,7 +945,7 @@ public abstract partial class SharedPhysicsSystem
                     }
                     else
                     {
-                        SetSleepTime(body, body.SleepTime + data.FrameTime);
+                        SetSleepTime(body, body.SleepTime + dt);
                     }
 
                     if (body.SleepTime >= data.TimeToSleep && island.PositionSolved)
@@ -1004,15 +957,12 @@ public abstract partial class SharedPhysicsSystem
         }
         else
         {
-            // Sleep bodies if needed. Prediction won't accumulate sleep-time for bodies.
             if (!prediction && data.SleepAllowed)
             {
                 var minSleepTime = float.MaxValue;
-
                 for (var i = 0; i < bodyCount; i++)
                 {
                     var body = island.Bodies[i].Comp1;
-
                     if (body.BodyType == BodyType.Static) continue;
 
                     if (!body.SleepingAllowed ||
@@ -1024,7 +974,7 @@ public abstract partial class SharedPhysicsSystem
                     }
                     else
                     {
-                        SetSleepTime(body, body.SleepTime + data.FrameTime);
+                        SetSleepTime(body, body.SleepTime + dt);
                         minSleepTime = MathF.Min(minSleepTime, body.SleepTime);
                     }
                 }
@@ -1039,11 +989,13 @@ public abstract partial class SharedPhysicsSystem
             }
         }
 
-        // Cleanup
         ArrayPool<Vector2>.Shared.Return(positions);
         ArrayPool<float>.Shared.Return(angles);
         ArrayPool<ContactVelocityConstraint>.Shared.Return(velocityConstraints);
         ArrayPool<ContactPositionConstraint>.Shared.Return(positionConstraints);
+        
+        if (bodyData != null)
+            ArrayPool<PhysicsBodyData>.Shared.Return(bodyData);
     }
 
     private void FinalisePositions(int start, int end, int offset, List<Entity<PhysicsComponent, TransformComponent>> bodies, Vector2[] positions, float[] angles, Vector2[] solvedPositions, float[] solvedAngles)

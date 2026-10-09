@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-#ifdef REFORGED_PHYSICS_USE_FAST_RSQRT
+#if defined(REFORGED_PHYSICS_USE_FAST_RSQRT) && (defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86))
 #include <immintrin.h>
 static inline float _rg_rsqrt(float x) {
 	x = fmaxf(x, 0.00001);
@@ -22,104 +22,60 @@ static inline float _rg_rsqrt(float x) {
     return _mm_cvtss_f32(r);
 }
 #else
+#if defined(REFORGED_PHYSICS_USE_FAST_RSQRT) // If ARM with defined(REFORGED_PHYSICS_USE_FAST_RSQRT)
+#warning "[REOFRGED PHYSICS] Can't use fast rsqrt - is NOT supported on ARM"
+#endif
 static inline float _rg_rsqrt(float x) {
 	return 1/sqrt(fmaxf(x, 0.00001));
 }
 #endif
 
-// default - x86-64-v2 - sse4.2
-__attribute__((target_clones("avx2,default")))
-REFORGED_API void IntegrateAllParallel(float* __restrict__ positions, float* __restrict__ angles, float* __restrict__ vels, float* __restrict__ angVels, const float* __restrict__ forces, const float* __restrict__ torques, const float* __restrict__ invMasses, const float* __restrict__ invI, const float* __restrict__ friction, const float* __restrict__ angDamp, int count, float dt, float maxVel, float maxAngVel) {
-    const float maxVelSq = maxVel * maxVel;
+static inline float clamp01(float v) {
+    return fminf(fmaxf(v, 0.0f), 1.0f);
+}
 
-    // char msg[1024];
-    // snprintf(msg, 1024, "(PHYSICS) TICK ! Count: %d", count);
-    // reforged_log(msg);
+// default - x86-64-v2 - sse4.2
+//__attribute__((target_clones("avx2,default")))
+REFORGED_API void IntegrateAllParallel(float* __restrict__ positions, float* __restrict__ angles, float* __restrict__ vels, float* __restrict__ angVels, const PhysicsBodyData* __restrict__ data, int count, float dt, float gravX, float gravY, float maxVel, float maxAngVel) {
+    const float maxVelSq = maxVel * maxVel;
+    const float maxAngVelSq = maxAngVel * maxAngVel;
 
     #pragma omp parallel for if(count >= REFORGED_INTEGRATE_OMP_COUNT) schedule(static)
     for (int i = 0; i < count; ++i) {
-        const float im = invMasses[i];
-        
-        const int i2 = i << 1;
-        const float dtIm = dt * im;
+        const auto& b = data[i];
+        // if (b.invMass <= 0.0f) continue;
 
-        float vx = vels[i2] + forces[i2] * dtIm;
-        float vy = vels[i2+1] + forces[i2+1] * dtIm;
+        int i2 = i << 1;
+        float vx = vels[i2];
+        float vy = vels[i2+1];
+        float av = angVels[i];
 
-        const float ld = 1.f / (1.f + dt * friction[i]);
-        vx *= ld;
-        vy *= ld;
+        vx += (b.fx * b.invMass + gravX * b.gravityScale) * dt;
+        vy += (b.fy * b.invMass + gravY * b.gravityScale) * dt;
+        av += (b.torque * b.invI) * dt;
 
-        const float velSq = vx * vx + vy * vy;
-        if (__builtin_expect(velSq > maxVelSq, 0)) {
-            const float ratio = maxVel * _rg_rsqrt(velSq);
-            vx *= ratio;
-            vy *= ratio;
+        float ld = std::max(1.0f - dt * b.linDamp, 0.0f);
+        float ad = std::max(1.0f - dt * b.angDamp, 0.0f);
+        vx *= ld; vy *= ld; av *= ad;
+
+		// limits
+        float vSq = vx * vx + vy * vy;
+        if (vSq > maxVelSq) {
+            float ratio = maxVel * _rg_rsqrt(vSq);
+            vx *= ratio; vy *= ratio;
+        }
+        if (av * av > maxAngVelSq) {
+            av = (av > 0.0f) ? maxAngVel : -maxAngVel;
         }
 
-        vels[i2] = vx;
-        vels[i2+1] = vy;
+        vels[i2] = vx; vels[i2+1] = vy;
+        angVels[i] = av;
         positions[i2] += vx * dt;
         positions[i2+1] += vy * dt;
-
-        const float av = (angVels[i] + torques[i] * invI[i] * dt) * (1.f / (1.f + dt * angDamp[i]));
-        angVels[i] = av;
         angles[i] += av * dt;
     }
 }
 
-REFORGED_API void StepPhysicsParallel(PhysicsBodyData* bodies, int count, float frameTime) {
-    #pragma omp parallel for schedule(static)
-    for (int i = 0; i < count; ++i) {
-        if (bodies[i].InvMass <= 0.0f) continue;
-
-		// Linear
-        bodies[i].VelX += (bodies[i].ForceX * bodies[i].InvMass) * frameTime;
-        bodies[i].VelY += (bodies[i].ForceY * bodies[i].InvMass) * frameTime;
-
-        float linDamp = 1.0f / (1.0f + frameTime * bodies[i].Friction);
-        bodies[i].VelX *= linDamp;
-        bodies[i].VelY *= linDamp;
-
-		// Rotation
-        bodies[i].AngVel += (bodies[i].Torque * bodies[i].InvI) * frameTime;
-
-        float angDamp = 1.0f / (1.0f + frameTime * bodies[i].AngDamping);
-        bodies[i].AngVel *= angDamp;
-    }
-}
-
-// REFORGED_API void IntegratePositionsNative(float* positions, float* angles, float* vels, float* angVels, int count, float dt, float maxVel, float maxAngVel)  {
-//     float maxVelSq = maxVel * maxVel;
-//     float maxAngVelSq = maxAngVel * maxAngVel;
-// 
-//     #pragma omp parallel for schedule(static)
-//     for (int i = 0; i < count; ++i) {
-//         float vx = vels[i*2];
-//         float vy = vels[i*2 + 1];
-//         float velSq = vx*vx + vy*vy;
-// 
-//         if (velSq > maxVelSq && velSq > 0.0001f) {
-//             float ratio = maxVel / std::sqrt(velSq);
-//             vx *= ratio;
-//             vy *= ratio;
-//             vels[i*2] = vx;
-//             vels[i*2 + 1] = vy;
-//         }
-// 
-//         float av = angVels[i];
-//         if (av * av > maxAngVelSq) {
-//             av = (av > 0 ? maxAngVel : -maxAngVel);
-//             angVels[i] = av;
-//         }
-// 
-//         positions[i*2] += vx * dt;
-//         positions[i*2 + 1] += vy * dt;
-//         angles[i] += av * dt;
-//     }
-// }
-
 #ifdef __cplusplus
 }
 #endif
-
