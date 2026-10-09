@@ -25,6 +25,8 @@ namespace Robust.Shared.GameObjects
     {
         [Dependency] private IEntityManager _entMan = default!;
 
+        public bool ActivelyLerping { get; set; } = false; // Are we actively lerping on client ?
+
         // Currently this field just exists for VV. In future, it might become a real field
         [ViewVariables, PublicAPI]
         private NetEntity NetParent => _entMan.GetNetEntity(_parent);
