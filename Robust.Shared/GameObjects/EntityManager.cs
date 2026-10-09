@@ -23,6 +23,8 @@ using Robust.Shared.Serialization.Markdown.Mapping;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
 
+using Robust.Reforged;
+
 namespace Robust.Shared.GameObjects
 {
     public delegate void EntityUidQueryCallback(EntityUid uid);
@@ -261,32 +263,40 @@ namespace Robust.Shared.GameObjects
             Started = false;
         }
 
-        public virtual void TickUpdate(float frameTime, bool noPredictions, Histogram? histogram)
+		public virtual void TickUpdate(float frameTime, bool noPredictions, Histogram? histogram)
         {
             UpdateTickHistogram(histogram);
 
             using (_entitySystemsHistogram?.NewTimer())
             using (_prof.Group("Systems"))
             {
+                ReforgedNative.reforged_section_begin("ECS_Systems");
                 _entitySystemManager.TickUpdate(frameTime, noPredictions);
+                ReforgedNative.reforged_section_end("ECS_Systems");
             }
 
             using (_entityEventBusHistogram?.NewTimer())
             using (_prof.Group("Events"))
             {
+                ReforgedNative.reforged_section_begin("ECS_Events");
                 EventBusInternal.ProcessEventQueue();
+                ReforgedNative.reforged_section_end("ECS_Events");
             }
 
             using (_queuedDeletionHistogram?.NewTimer())
             using (_prof.Group("QueueDel"))
             {
+                ReforgedNative.reforged_section_begin("ECS_QueueDel");
                 ProcessQueueudDeletions();
+                ReforgedNative.reforged_section_end("ECS_QueueDel");
             }
 
             using (_componentCullHistogram?.NewTimer())
             using (_prof.Group("ComponentCull"))
             {
+                ReforgedNative.reforged_section_begin("ECS_ComponentCull");
                 CullRemovedComponents();
+                ReforgedNative.reforged_section_end("ECS_ComponentCull");
             }
         }
 
@@ -302,7 +312,7 @@ namespace Robust.Shared.GameObjects
             _componentCullHistogram = histogram?.WithLabels("ComponentCull");
         }
 
-        internal void ProcessQueueudDeletions()
+        internal virtual void ProcessQueueudDeletions()
         {
             while (QueuedDeletions.TryDequeue(out var uid))
             {
